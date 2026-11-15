@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Chim bay</title>
+<style>
+html,body{margin:0;height:100%;background:#12202b;overflow:hidden;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+body{display:flex;align-items:center;justify-content:center}
+canvas{height:100vh;max-width:100vw;aspect-ratio:360/640;background:#7ec8e3;display:block}
+</style>
+</head>
+<body>
+<canvas id="c" width="360" height="640" aria-label="Trò chơi chim bay. Bấm hoặc nhấn phím cách để vỗ cánh"></canvas>
+<script>
+const cv=document.getElementById("c"),ctx=cv.getContext("2d");
+const W=360,H=640,GROUND=90,PIPE_W=62,GAP=150,SPEED=140,SPACING=210;
+const GRAV=1500,FLAP=-430,BX=90,R=14;
+let state="ready",bird,pipes,score,best=0,tNow=0,groundX=0,deadAt=0,flash=0,clouds=[];
+try{best=+localStorage.getItem("flappy-best")||0}catch(e){}
+for(let i=0;i<4;i++)clouds.push({x:Math.random()*W,y:60+Math.random()*220,s:.6+Math.random()*.8});
+
+function reset(){
+  bird={y:H/2-40,vy:0,rot:0};
+  pipes=[];score=0;
+  for(let i=0;i<3;i++)addPipe(W+120+i*SPACING);
+}
+function addPipe(x){
+  const top=70+Math.random()*(H-GROUND-GAP-140);
+  pipes.push({x,top,scored:false});
+}
+function beep(f,d,type){
+  try{
+    const a=beep.a||(beep.a=new (window.AudioContext||window.webkitAudioContext)());
+    const o=a.createOscillator(),g=a.createGain();
+    o.type=type||"square";o.frequency.value=f;
+    g.gain.setValueAtTime(.12,a.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,a.currentTime+d);
+    o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+d);
+  }catch(e){}
+}
+function flap(){
+  if(state==="ready"){state="play"}
+  if(state==="play"){bird.vy=FLAP;beep(640,.08)}
+  else if(state==="dead"&&tNow-deadAt>600){reset();state="ready"}
+}
+function die(){
+  if(state==="dead")return;
+  state="dead";deadAt=tNow;flash=1;beep(140,.35,"sawtooth");
+  if(score>best){best=score;try{localStorage.setItem("flappy-best",best)}catch(e){}}
+}
+function hitPipe(p){
+  const cx=BX,cy=bird.y;
+  const rects=[[p.x,0,PIPE_W,p.top],[p.x,p.top+GAP,PIPE_W,H]];
+  return rects.some(([x,y,w,h])=>{
+    const nx=Math.max(x,Math.min(cx,x+w)),ny=Math.max(y,Math.min(cy,y+h));
+    return (cx-nx)**2+(cy-ny)**2<(R-2)**2;
+  });
+}
+function update(dt){
+  if(state==="ready"){bird.y=H/2-40+Math.sin(tNow/180)*8;groundX=(groundX+SPEED*dt)%24;return}
+  bird.vy+=GRAV*dt;bird.y+=bird.vy*dt;
+  bird.rot=Math.max(-.5,Math.min(1.3,bird.vy/600));
+  if(state==="play"){
+    groundX=(groundX+SPEED*dt)%24;
+    for(const p of pipes){
+      p.x-=SPEED*dt;
+      if(!p.scored&&p.x+PIPE_W<BX-R){p.scored=true;score++;beep(880,.08,"triangle")}
+      if(hitPipe(p))die();
+    }
+    if(pipes[0].x<-PIPE_W)pipes.shift();
+    const last=pipes[pipes.length-1];
+    if(last.x<W+40-SPACING+W-W)addPipe(last.x+SPACING);
+    if(bird.y<R)bird.y=R,bird.vy=0;
+    if(bird.y>H-GROUND-R)die();
+  }
+  if(state==="dead"&&bird.y>H-GROUND-R){bird.y=H-GROUND-R;bird.vy=0}
+  clouds.forEach(c=>{c.x-=12*c.s*dt;if(c.x<-70)c.x=W+70});
+}
+function pipe(x,y,h,flip){
+  ctx.fillStyle="#5aa02c";ctx.fillRect(x,y,PIPE_W,h);
+  ctx.fillStyle="#7bc443";ctx.fillRect(x+6,y,10,h);
+  ctx.strokeStyle="#2f5f14";ctx.lineWidth=3;ctx.strokeRect(x,y,PIPE_W,h);
+  const cy=flip?y+h-24:y;
+  ctx.fillStyle="#5aa02c";ctx.fillRect(x-4,cy,PIPE_W+8,24);
+  ctx.fillStyle="#7bc443";ctx.fillRect(x+2,cy,10,24);
+  ctx.strokeRect(x-4,cy,PIPE_W+8,24);
+}
+function draw(){
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#4fb3e0");g.addColorStop(1,"#c9ecf5");
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="rgba(255,255,255,.85)";
+  clouds.forEach(c=>{
+    ctx.beginPath();ctx.arc(c.x,c.y,18*c.s,0,7);ctx.arc(c.x+20*c.s,c.y+4,14*c.s,0,7);ctx.arc(c.x-20*c.s,c.y+4,13*c.s,0,7);ctx.fill();
+  });
+  pipes.forEach(p=>{pipe(p.x,0,p.top,true);pipe(p.x,p.top+GAP,H-GROUND-p.top-GAP,false)});
+  // đất
+  ctx.fillStyle="#dcc98a";ctx.fillRect(0,H-GROUND,W,GROUND);
+  ctx.fillStyle="#8fd14f";ctx.fillRect(0,H-GROUND,W,14);
+  ctx.fillStyle="#6fb03a";
+  for(let x=-24;x<W+24;x+=24)ctx.fillRect(x-groundX,H-GROUND,12,14);
+  ctx.fillStyle="#2f5f14";ctx.fillRect(0,H-GROUND,W,3);
+  // chim
+  ctx.save();ctx.translate(BX,bird.y);ctx.rotate(bird.rot);
+  ctx.fillStyle="#f5c342";ctx.beginPath();ctx.arc(0,0,R+2,0,7);ctx.fill();
+  ctx.strokeStyle="#9a6a12";ctx.lineWidth=2;ctx.stroke();
+  const wing=Math.sin(tNow/70)*5;
+  ctx.fillStyle="#e39b1f";ctx.beginPath();ctx.ellipse(-4,3+wing/2,8,5,-.3,0,7);ctx.fill();
+  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(7,-5,5,0,7);ctx.fill();
+  ctx.fillStyle="#222";ctx.beginPath();ctx.arc(9,-5,2.2,0,7);ctx.fill();
+  ctx.fillStyle="#e8552b";ctx.beginPath();ctx.moveTo(12,0);ctx.lineTo(23,3);ctx.lineTo(12,8);ctx.closePath();ctx.fill();
+  ctx.restore();
+  // chữ
+  ctx.textAlign="center";ctx.lineJoin="round";
+  const txt=(s,x,y,size)=>{
+    ctx.font="bold "+size+"px 'Trebuchet MS',Verdana,sans-serif";
+    ctx.lineWidth=size/6;ctx.strokeStyle="#2a2a2a";ctx.strokeText(s,x,y);
+    ctx.fillStyle="#fff";ctx.fillText(s,x,y);
+  };
+  if(state!=="ready")txt(score,W/2,90,52);
+  if(state==="ready"){
+    txt("Chim bay",W/2,170,46);
+    txt("Bấm để bắt đầu",W/2,H-GROUND-60,22);
+    txt("Kỷ lục: "+best,W/2,H-GROUND-28,18);
+  }
+  if(state==="dead"){
+    ctx.fillStyle="rgba(0,0,0,.45)";ctx.fillRect(40,190,W-80,200);
+    ctx.strokeStyle="#fff";ctx.lineWidth=2;ctx.strokeRect(40,190,W-80,200);
+    txt("Hết lượt",W/2,240,36);
+    txt("Điểm: "+score,W/2,290,26);
+    txt("Kỷ lục: "+best,W/2,325,22);
+    if(tNow-deadAt>600)txt("Bấm để chơi lại",W/2,370,20);
+  }
+  if(flash>0){ctx.fillStyle="rgba(255,255,255,"+flash+")";ctx.fillRect(0,0,W,H);flash=Math.max(0,flash-.06)}
+}
+let last=performance.now();
+function loop(t){
+  tNow=t;const dt=Math.min(.033,(t-last)/1000);last=t;
+  update(dt);draw();requestAnimationFrame(loop);
+}
+cv.addEventListener("pointerdown",e=>{e.preventDefault();flap()});
+window.addEventListener("keydown",e=>{
+  if(e.code==="Space"||e.code==="ArrowUp"){e.preventDefault();if(!e.repeat)flap()}
+});
+reset();requestAnimationFrame(loop);
+</script>
+</body>
+</html>
