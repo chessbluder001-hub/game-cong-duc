@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tụng kinh tích công đức</title>
+<style>
+:root{--bg:#17120f;--panel:#241b16;--line:#3b2d24;--ink:#f0e4cf;--mute:#a8957c;--gold:#e3a73b;--red:#b5402e;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Noto Serif","Palatino Linotype",Georgia,serif;min-height:100vh}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.wrap{max-width:960px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:1fr}
+@media(min-width:800px){.wrap{grid-template-columns:1.1fr 1fr}}
+header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+h1{margin:0;font-size:1.5rem;font-weight:700}
+.rank{color:var(--gold)}
+.main{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;text-align:center;position:relative;overflow:hidden}
+.main::before{content:"";position:absolute;inset:0;background:var(--scene,transparent);opacity:.18;transition:background .6s}
+.main>*{position:relative}
+.merit{font-size:2.8rem;font-weight:700;color:var(--gold);line-height:1.1}
+.rate{color:var(--mute);margin-bottom:12px}
+#mo{width:min(260px,70vw);aspect-ratio:1;border:0;background:none;border-radius:50%;transition:transform .08s}
+#mo:active,#mo.hit{transform:scale(.93)}
+#mo svg{width:100%;height:100%}
+.hint{color:var(--mute);font-size:.9rem;margin:8px 0 0}
+.float{position:fixed;pointer-events:none;color:var(--gold);font-weight:700;animation:up 1s ease-out forwards;z-index:9}
+@keyframes up{to{transform:translateY(-70px);opacity:0}}
+@media(prefers-reduced-motion:reduce){.float{animation:none;opacity:0}#mo{transition:none}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+section h2{margin:0 0 10px;font-size:1.1rem}
+.item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.item:first-of-type{border-top:0}
+.item small{color:var(--mute);display:block}
+.btn{background:var(--red);border:0;border-radius:8px;padding:8px 12px;white-space:nowrap}
+.btn:disabled{background:#3b2d24;color:var(--mute);cursor:not-allowed}
+.btn.on{background:var(--gold);color:#241b16;font-weight:700}
+.right{display:grid;gap:16px;align-content:start}
+footer{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;color:var(--mute);font-size:.9rem;align-items:center}
+footer button{background:none;border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+#msg{margin-left:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Tụng kinh tích công đức</h1>
+    <div>Cấp bậc: <span class="rank" id="rank"></span></div>
+  </header>
+
+  <div class="main" id="main">
+    <div id="place" style="color:var(--mute)"></div>
+    <div class="merit" id="merit">0</div>
+    <div class="rate" id="rate"></div>
+    <button id="mo" aria-label="Gõ mõ tụng kinh">
+      <svg viewBox="0 0 200 200" aria-hidden="true">
+        <circle cx="100" cy="106" r="84" fill="#7a4a24"/>
+        <circle cx="100" cy="100" r="84" fill="#a56a35"/>
+        <circle cx="100" cy="100" r="62" fill="none" stroke="#7a4a24" stroke-width="3" opacity=".6"/>
+        <path d="M44 120 Q100 150 156 120" fill="none" stroke="#2b1809" stroke-width="12" stroke-linecap="round"/>
+        <circle cx="132" cy="70" r="9" fill="#2b1809"/>
+      </svg>
+    </button>
+    <p class="hint">Bấm vào mõ hoặc nhấn phím cách để tụng kinh</p>
+  </div>
+
+  <div class="right">
+    <section>
+      <h2>Nâng cấp</h2>
+      <div id="ups"></div>
+    </section>
+    <section>
+      <h2>Đi chùa</h2>
+      <div id="temples"></div>
+    </section>
+  </div>
+
+  <footer>
+    <button id="snd">Âm thanh: bật</button>
+    <button id="reset">Chơi lại từ đầu</button>
+    <span id="msg"></span>
+  </footer>
+</div>
+
+<script>
+const UPS=[
+  {id:"mo",name:"Mõ gỗ tốt",desc:"+1 công đức mỗi lần gõ",base:15,click:1},
+  {id:"ds",name:"Đệ tử tụng kinh",desc:"+0,5 công đức mỗi giây",base:50,cps:.5},
+  {id:"huong",name:"Nén hương trầm",desc:"+3 công đức mỗi giây",base:250,cps:3},
+  {id:"den",name:"Đèn dầu",desc:"+15 công đức mỗi giây",base:1500,cps:15},
+  {id:"chuong",name:"Chuông đồng",desc:"+80 công đức mỗi giây",base:10000,cps:80},
+  {id:"hongchung",name:"Đại hồng chung",desc:"+500 công đức mỗi giây",base:80000,cps:500}
+];
+const TEMPLES=[
+  {name:"Chùa làng",need:0,mult:1,scene:"radial-gradient(circle at 50% 0,#6b8f4e,transparent 70%)"},
+  {name:"Chùa Một Cột",need:2000,mult:1.5,scene:"radial-gradient(circle at 50% 0,#d6a24a,transparent 70%)"},
+  {name:"Chùa Hương",need:50000,mult:2,scene:"radial-gradient(circle at 50% 0,#4e8f8a,transparent 70%)"},
+  {name:"Chùa Thiên Mụ",need:1e6,mult:3,scene:"radial-gradient(circle at 50% 0,#8f4e6b,transparent 70%)"},
+  {name:"Yên Tử",need:2e7,mult:5,scene:"radial-gradient(circle at 50% 0,#e8e0c8,transparent 70%)"}
+];
+const RANKS=[[0,"Cư sĩ"],[1000,"Phật tử"],[20000,"Sa di"],[500000,"Tỳ kheo"],[1e7,"Pháp sư"],[2e8,"Đại sư"]];
+const KEY="congduc-save-v1";
+let G={merit:0,total:0,owned:{},temple:0,sound:true,t:Date.now()};
+const $=id=>document.getElementById(id);
+
+function fmt(n){
+  if(n<1000)return (Math.round(n*10)/10).toString().replace(".",",");
+  const u=[[1e9,"tỷ"],[1e6,"triệu"],[1e3,"nghìn"]];
+  for(const[v,s]of u)if(n>=v)return (n/v).toFixed(n/v<10?2:1).replace(".",",")+" "+s;
+}
+const own=id=>G.owned[id]||0;
+const cost=u=>Math.ceil(u.base*Math.pow(1.15,own(u.id)));
+const mult=()=>TEMPLES[G.temple].mult;
+const perClick=()=>(1+UPS.reduce((s,u)=>s+(u.click||0)*own(u.id),0))*mult();
+const perSec=()=>UPS.reduce((s,u)=>s+(u.cps||0)*own(u.id),0)*mult();
+function add(n){G.merit+=n;G.total+=n}
+
+function beep(){
+  if(!G.sound)return;
+  try{
+    const c=beep.c||(beep.c=new (window.AudioContext||window.webkitAudioContext)());
+    const o=c.createOscillator(),g=c.createGain();
+    o.type="triangle";o.frequency.setValueAtTime(520,c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(220,c.currentTime+.12);
+    g.gain.setValueAtTime(.35,c.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.18);
+    o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+.2);
+  }catch(e){}
+}
+
+function chant(e){
+  const v=perClick();
+  add(v);beep();
+  const f=document.createElement("div");
+  f.className="float";f.textContent="+"+fmt(v);
+  const r=$("mo").getBoundingClientRect();
+  f.style.left=(e&&e.clientX?e.clientX:r.left+r.width/2)-10+"px";
+  f.style.top=(e&&e.clientY?e.clientY:r.top+r.height/2)-20+"px";
+  document.body.appendChild(f);setTimeout(()=>f.remove(),1000);
+  update();
+}
+
+function buy(id){
+  const u=UPS.find(x=>x.id===id),c=cost(u);
+  if(G.merit<c)return;
+  G.merit-=c;G.owned[id]=own(id)+1;
+  build();update();
+}
+function go(i){
+  if(G.total<TEMPLES[i].need)return;
+  G.temple=i;build();update();
+}
+
+function build(){
+  $("ups").innerHTML=UPS.map(u=>`<div class="item"><div>${u.name} (đã có ${own(u.id)})<small>${u.desc}</small></div>
+    <button class="btn" data-up="${u.id}">${fmt(cost(u))}</button></div>`).join("");
+  $("temples").innerHTML=TEMPLES.map((t,i)=>{
+    const ok=G.total>=t.need,cur=G.temple===i;
+    return `<div class="item"><div>${t.name}<small>Công đức nhân ${t.mult}${ok?"":" · mở khi tích đủ "+fmt(t.need)}</small></div>
+    <button class="btn ${cur?"on":""}" data-t="${i}" ${ok?"":"disabled"}>${cur?"Đang ở":"Đến chùa"}</button></div>`}).join("");
+}
+
+function update(){
+  $("merit").textContent=fmt(G.merit);
+  $("rate").textContent="Mỗi lần gõ +"+fmt(perClick())+" · Mỗi giây +"+fmt(perSec());
+  $("place").textContent="Đang ở "+TEMPLES[G.temple].name;
+  $("main").style.setProperty("--scene",TEMPLES[G.temple].scene);
+  let r=RANKS[0][1];for(const[n,s]of RANKS)if(G.total>=n)r=s;
+  $("rank").textContent=r;
+  document.querySelectorAll("[data-up]").forEach(b=>{
+    const u=UPS.find(x=>x.id===b.dataset.up);
+    b.disabled=G.merit<cost(u);b.textContent=fmt(cost(u));
+  });
+  document.querySelectorAll("[data-t]").forEach(b=>{
+    const i=+b.dataset.t,ok=G.total>=TEMPLES[i].need;
+    if(b.disabled&&ok)build();
+  });
+}
+
+function save(){G.t=Date.now();try{localStorage.setItem(KEY,JSON.stringify(G))}catch(e){}}
+function load(){
+  try{
+    const s=localStorage.getItem(KEY);
+    if(!s)return;
+    G=Object.assign(G,JSON.parse(s));
+    const secs=Math.min((Date.now()-G.t)/1000,8*3600);
+    const gain=perSec()*secs*.5;
+    if(gain>=1){add(gain);$("msg").textContent="Khi bạn vắng mặt, tích được +"+fmt(gain)+" công đức";}
+  }catch(e){}
+}
+
+$("mo").addEventListener("click",chant);
+$("ups").addEventListener("click",e=>{const b=e.target.closest("[data-up]");if(b)buy(b.dataset.up)});
+$("temples").addEventListener("click",e=>{const b=e.target.closest("[data-t]");if(b)go(+b.dataset.t)});
+$("snd").addEventListener("click",()=>{G.sound=!G.sound;$("snd").textContent="Âm thanh: "+(G.sound?"bật":"tắt")});
+$("reset").addEventListener("click",()=>{
+  if(confirm("Xóa toàn bộ tiến trình và chơi lại từ đầu?")){
+    try{localStorage.removeItem(KEY)}catch(e){}
+    G={merit:0,total:0,owned:{},temple:0,sound:true,t:Date.now()};
+    $("msg").textContent="";build();update();
+  }
+});
+
+let last=Date.now();
+setInterval(()=>{
+  const now=Date.now(),dt=(now-last)/1000;last=now;
+  add(perSec()*dt);update();
+},250);
+setInterval(save,5000);
+window.addEventListener("beforeunload",save);
+
+load();build();update();
+$("snd").textContent="Âm thanh: "+(G.sound?"bật":"tắt");
+</script>
+</body>
+</html>
